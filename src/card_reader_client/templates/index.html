@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carta RFID</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).ready(function(){
+            $("#read-button").click(function(){
+                $.getJSON('/get-card', function(data){
+                    $("#card-name").text(data.card_name);
+                    $("#card-image").attr("src", data.card_image); // Atualiza a imagem
+                    
+                    if (data.is_owner === true) {
+                        $("#is_owner").css("background-color", "green");
+                    } else {
+                        $("#is_owner").css("background-color", "red");
+                    }
+                });
+            });
+        });
+    </script>
+</head>
+<body>
+    <h1>Guess the card!</h1>
+    <p id="card-name">Pressione o botão para ler a carta.</p>
+    <div id="is_owner" style="border: 1px solid black; padding: 10px;">
+        <img id="card-image" src="/static/images/costas_baralho.jpeg" alt="Imagem da Carta">
+    </div>
+    <button id="read-button">Ler Carta</button>
+</body>
+</html>
+
