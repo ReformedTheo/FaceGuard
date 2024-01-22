@@ -73,6 +73,7 @@ class SimpleFaceRecognizer:
 
                     # Fetching the result
                     result = cursor.fetchone()
+                    con.commit()
                     print(f"teoricamente rodou a Query... {result[0]}")
                     return result[0]
 
