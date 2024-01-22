@@ -1,81 +1,90 @@
 import face_recognition
-import os
-import sys
 import cv2
-import numpy as np
-import math
-import socket
-import threading
-import json
+import os
+import pymysql
+from datetime import datetime
 
-def face_confidence(face_distance, face_match_threshold=0.6):
-    range = (1.0 - face_match_threshold)
-    linear_val = (1.0 - face_distance) / (range * 2.0)
-
-    if face_distance > face_match_threshold:
-        return str(round(linear_val * 100, 2)) + '%'
-    else:
-        value = (linear_val + ((1.0 - linear_val) * math.pow((linear_val - 0.5) * 2, 0.2))) * 100
-        return str(round(value, 2)) + '%'
-
-class FaceRecognitionServer:
-    def __init__(self):
-        self.encode_faces()
-        self.start_server()
-
-    def encode_faces(self):
+class SimpleFaceRecognizer:
+    def _init_(self):
         self.known_face_encodings = []
         self.known_face_names = []
-        for image in os.listdir('faces'):
-            face_image = face_recognition.load_image_file(f'faces/{image}')
-            face_encoding = face_recognition.face_encodings(face_image)[0]
-            self.known_face_encodings.append(face_encoding)
-            self.known_face_names.append(image.split('.')[0])
-
-    def start_server(self):
-        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.bind(('0.0.0.0', 9091))
-        server_socket.listen(5)
+        self.load_known_faces()
         print("Face Recognition Server running...")
 
-        while True:
-            client_socket, addr = server_socket.accept()
-            threading.Thread(target=self.handle_client, args=(client_socket,)).start()
+    def load_known_faces(self):
+        for image_name in os.listdir('faces'):
+            image_path = os.path.join('faces', image_name)
+            image = face_recognition.load_image_file(image_path)
+            encoding = face_recognition.face_encodings(image)[0]
 
-    def handle_client(self, client_socket):
-        face_data = self.run_recognition_once()
-        client_socket.sendall(json.dumps(face_data).encode())
-        client_socket.close()
+            self.known_face_encodings.append(encoding)
+            self.known_face_names.append(image_name)
 
-    def run_recognition_once(self):
+    def recognize_faces(self):
         video_capture = cv2.VideoCapture(0)
-        ret, frame = video_capture.read()
-        if not ret:
-            sys.exit('Could not read from camera.')
 
-        small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
-        rgb_small_frame = small_frame[:, :, ::-1]
+        while True:
+            ret, frame = video_capture.read()
+            if not ret:
+                break
 
-        face_locations = face_recognition.face_locations(rgb_small_frame)
-        face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
+            small_frame = cv2.resize(frame, (0, 0), fx=0.25, fy=0.25)
+            rgb_small_frame = small_frame[:, :, ::-1]
 
-        face_data = []
-        for face_encoding in face_encodings:
-            matches = face_recognition.compare_faces(self.known_face_encodings, face_encoding)
-            name = 'Unknown'
-            confidence = 'Unknown'
+            face_locations = face_recognition.face_locations(rgb_small_frame)
+            face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
 
-            face_distances = face_recognition.face_distance(self.known_face_encodings, face_encoding)
-            best_match_index = np.argmin(face_distances)
+            for face_encoding, face_location in zip(face_encodings, face_locations):
+                matches = face_recognition.compare_faces(self.known_face_encodings, face_encoding)
+                name = "Unknown"
 
-            if matches[best_match_index]:
-                name = self.known_face_names[best_match_index]
-                confidence = face_confidence(face_distances[best_match_index])
+                if True in matches:
+                    first_match_index = matches.index(True)
+                    name = self.known_face_names[first_match_index]
 
-            face_data.append({'name': name, 'confidence': confidence})
+                top, right, bottom, left = [coordinate * 4 for coordinate in face_location]
+                cv2.rectangle(frame, (left, top), (right, bottom), (0, 0, 255), 2)
+                cv2.putText(frame, name, (left + 6, bottom - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 1)
+
+            cv2.imshow('Face Recognition', frame)
+
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord('q'):
+                print("Quit app")
+                break
+            elif key == ord('r'):
+                self.send_face_data(name)
 
         video_capture.release()
-        return face_data
+        cv2.destroyAllWindows()
 
-if __name__ == '__main__':
-    fr_server = FaceRecognitionServer()
+    def send_face_data(self, face_data):
+        """
+        Insert face data into the MySQL database.
+            """
+        try:
+            con = pymysql.connect(host='database-1.cvm0aqq86tlh.sa-east-1.rds.amazonaws.com', user='admin',password='Chess.com2409',database='rfid_app', port=3306)
+            # Creating a cursor object using the cursor() method
+            with con.cursor() as cursor:
+                    # SQL query to fetch the name of the face with ID 0
+                    query = "UPDATE last_face SET name = %s WHERE id = 1"
+                    # Executing the query
+                    cursor.execute(query, (face_data))
+
+                    # Fetching the result
+                    result = cursor.fetchone()
+                    print(f"teoricamente rodou a Query... {result[0]}")
+                    return result[0]
+
+        except pymysql.MySQLError as e:
+            print("Error while connecting to MySQL", e)
+            return None
+
+        finally:
+            # Closing the connection
+            if con:
+                con.close()
+
+if __name__ == '_main_':
+    recognizer = SimpleFaceRecognizer()
+    recognizer.recognize_faces()

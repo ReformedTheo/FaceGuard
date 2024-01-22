@@ -9,7 +9,6 @@
         $(document).ready(function(){
             $("#read-button").click(function(){
                 $.getJSON('/get-card', function(data){
-                    $("#card-name").text(data.card_name);
                     $("#card-image").attr("src", data.card_image); // Atualiza a imagem
                     
                     if (data.is_owner === true) {
